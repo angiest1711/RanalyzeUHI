@@ -44,6 +44,7 @@ trimRaster: Trims the raster data to focus on areas of interest.
 ## Examples
 
 ###indexplot
+
 ![image](https://github.com/angiest1711/RanalyzeUHI/assets/119541571/2766b072-134b-4005-ac4d-2242e2e867c1)
 
 
