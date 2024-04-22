@@ -1,7 +1,7 @@
 ## This is an example file of how to use the package. The data is included in the repository.
 
 library(remotes)
-remotes::install_github("angiest1711/RnalyzeUHI")
+remotes::install_github("angiest1711/RanalyzeUHI")
 
 
 library(sp)
@@ -12,7 +12,7 @@ library(rgdal)
 library(dplyr)
 library(terra)
 library(RColorBrewer)
-library(RnalyzeUHI)
+library(RanalyzeUHI)
 library(scales)
 
 #Loading bands
