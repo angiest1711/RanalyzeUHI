@@ -1,0 +1,153 @@
+## This is an example file of how to use the package. The data is included in the repository.
+
+library(remotes)
+remotes::install_github("angiest1711/RanalyzeUHI")
+
+
+library(sp)
+library(raster)
+library(sf)
+library(ggplot2)
+library(rgdal)
+library(dplyr)
+library(terra)
+library(RColorBrewer)
+library(RanalyzeUHI)
+library(scales)
+
+#Loading bands
+
+img_22_b1<- raster("LC09_L2SP_008057_20220131_20230429_02_T1/LC09_L2SP_008057_20220131_20230429_02_T1_SR_B1.tif")
+img_22_b2<- raster("LC09_L2SP_008057_20220131_20230429_02_T1/LC09_L2SP_008057_20220131_20230429_02_T1_SR_B2.tif")
+img_22_b3<- raster("LC09_L2SP_008057_20220131_20230429_02_T1/LC09_L2SP_008057_20220131_20230429_02_T1_SR_B3.tif")
+img_22_b4<- raster("LC09_L2SP_008057_20220131_20230429_02_T1/LC09_L2SP_008057_20220131_20230429_02_T1_SR_B4.tif")
+img_22_b5<- raster("LC09_L2SP_008057_20220131_20230429_02_T1/LC09_L2SP_008057_20220131_20230429_02_T1_SR_B5.tif")
+img_22_b6<- raster("LC09_L2SP_008057_20220131_20230429_02_T1/LC09_L2SP_008057_20220131_20230429_02_T1_SR_B6.tif")
+img_22_b7<- raster("LC09_L2SP_008057_20220131_20230429_02_T1/LC09_L2SP_008057_20220131_20230429_02_T1_SR_B7.tif")
+img_22_b10<- raster("LC09_L2SP_008057_20220131_20230429_02_T1/LC09_L2SP_008057_20220131_20230429_02_T1_ST_B10.TIF")
+
+stack_band<-stack(img_22_b1,img_22_b2,img_22_b3,img_22_b4,img_22_b5,img_22_b6,img_22_b7)
+
+pal <- colorRampPalette(rev(brewer.pal(11, 'RdYlBu')))(200)
+
+thermal<-adjustRaster(img_22_b10,correction_type = "temperature")
+plot(thermal,col=pal)
+
+stack_img<-adjustRaster(stack_band,correction_type = "reflectance")
+names(stack_img) <- c("B1","B2", "B3", "B4", "B5", "B6", "B7")
+plot(stack_img)
+
+#Testing band combinations
+
+infrarrojo<-plotRGB(stack_img, r="B5",g="B4",b="B3", stretch="hist")
+falso_color<-plotRGB(stack_img, r="B7",g="B6",b="B4", stretch="hist")
+
+#Loading vector layers
+
+bog <- st_read("bog/bog.shp")
+bog_crs <- st_crs(bog)$proj4string
+thermal <- projectRaster(thermal, crs = bog_crs)
+stack_img <- projectRaster(stack_img, crs = bog_crs)
+
+ggplot(data = bog) +
+  geom_sf()+
+  ggtitle("Bogota")
+
+#Croping
+
+ciudad<-trimRaster(stack_img, bog)
+plot(ciudad)
+plotRGB(ciudad, r="B4",g="B3",b="B2", stretch="hist")
+plotRGB(ciudad, r="B5",g="B4",b="B3", stretch="hist")
+writeRaster(ciudad, "J:/ciudad.tif", format = "GTiff", overwrite = TRUE)
+
+
+#NDVI and NDBI
+
+red <- ciudad$B4
+nir<- ciudad$B5
+swir <- ciudad$B6
+lst <- thermal
+
+
+#NDVI
+veg <- NDVI(nir,red)
+plot(veg, main = "NDVI", col=colorRampPalette(brewer.pal(11, 'RdYlGn'))(200), zlim=c(0, 1))
+
+#NDBI
+builtup <- NDBI(swir,nir)
+plot(builtup, main = "NDBI", col=colorRampPalette(c("black", "white"))(255))
+
+
+#Landcover
+
+cover_shp <- vect("landcover/training_data_bogota.shp")
+lst_spat <- rast(lst)
+custom_levels <- c("Crops", "Wetlands", "Bare Soil", "Vegetation", "Water", "Urban")
+cover_column<-cover_shp$Cobertura
+
+# Load vector data using sf
+cover_shp <- st_read("landcover/training_data_bogota.shp")
+
+# Convert the factor levels for Cobertura
+cover_shp$Cobertura <- factor(cover_shp$Cobertura,
+                              levels = c("Crops", "Wetlands", "Bare Soil", "Vegetation", "Water", "Urban"))
+
+# Group by Cobertura and summarize with spatial union
+lc_cover <- aggregate(cover_shp, by="Cobertura", fun=mean, na.rm=TRUE, dissolve=TRUE)
+
+extracted_data <- extract_lst_data(lc_cover, lst, cover_column)
+# Set the coordinate reference system (CRS) for lc_cover from the LST raster
+lst <- rast(lst)  # Converting RasterLayer to a SpatRaster
+crs(lc_cover) <- crs(lst)
+
+# Extract LST data using the land cover data
+df_lc <- extract(lst_spat, lc_cover, method = "simple", as.data.frame = TRUE)
+
+# Add IDs for matching
+lc_cover$ID <- 1:nrow(lc_cover)
+df_lc <- merge(df_lc, lc_cover[c("Cobertura", "ID")], by = "ID")
+names(df_lc)[names(df_lc) == "layer"] <- "LST"
+
+# Adjust factor levels for plot
+df_lc$Cobertura <- factor(df_lc$Cobertura,
+                          levels = c("Crops", "Wetlands", "Bare Soil", "Vegetation", "Water", "Urban"))
+
+# Plot using ggplot2
+ggplot(df_lc, aes(x = Cobertura, y = LST, fill = Cobertura)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("wheat","#528B8B","#CD8162", "palegreen3","dodgerblue4","ivory4")) +
+  labs(x = "Land Cover", y = "LST (°C)") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        panel.grid.major = element_line(size = 0.5, linetype = "dashed", color = "gray50"),
+        panel.grid.minor = element_line(size = 0.25, linetype = "dashed", color = "gray50"))
+
+
+
+
+# Buffer rural area
+
+buf <- st_difference((st_buffer(bog, dist =  2000)),bog) #Obtain only external area of the city buffer
+plot(st_geometry(buf), col="black", main= "External area of the buffer")
+
+rural<-crop(r_stack, buf)
+rural<-mask(rural, buf)
+plotRGB(rural,  r="B4",g="B3",b="B2", stretch="hist")
+
+lst_rural<-crop(lst,buf)
+plot(lst_rural, col=pal)
+plot(bog, add=TRUE)
+lst_rural<-mask(lst_rural,buf)
+
+#Relationship between variables
+
+lst_c<-trimRaster(lst,bog)
+plot(lst_c)
+
+st_indices <- stack(lst_c, veg, builtup)
+
+# LST vs NDVI
+
+NDVI_LST_indexplot<-indexplot(lst_c, veg, "NDVI")
+NDBI_LST_indexplot<-indexplot(lst_c,builtup,"NDBI")
