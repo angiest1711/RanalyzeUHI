@@ -40,3 +40,13 @@ NDVI: Calculates the Normalized Difference Vegetation Index, which is crucial fo
 rural_area_extraction: Creates a buffer around specified urban areas (city geometries) and calculates the extent of rural land around these urban centers. 
 
 trimRaster: Trims the raster data to focus on areas of interest.
+
+## Examples
+
+###indexplot
+![image](https://github.com/angiest1711/RanalyzeUHI/assets/119541571/2766b072-134b-4005-ac4d-2242e2e867c1)
+
+
+### adjustRaster and trimRaster
+
+![image](https://github.com/angiest1711/RanalyzeUHI/assets/119541571/542270fb-371b-4d4f-b88f-b220ba6ea24d)
